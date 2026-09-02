@@ -1,0 +1,26 @@
+{
+  "name": "regent-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server exposing Regent website operations (content, careers, leads, analytics, newsletter) to AI agents.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "regent-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "create-agent": "tsx src/create_agent.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@supabase/supabase-js": "^2.45.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
+  }
+}
