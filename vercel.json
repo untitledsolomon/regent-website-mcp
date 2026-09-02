@@ -1,0 +1,9 @@
+{
+  "buildCommand": "npm run build",
+  "functions": {
+    "api/mcp.ts": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  }
+}
