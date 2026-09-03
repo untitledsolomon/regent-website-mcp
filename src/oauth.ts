@@ -14,7 +14,8 @@ import { supabase } from "./supabase.js";
 // imported transitively from src/wrap-register.ts, which is also used by
 // the stdio entrypoint (src/index.ts) for local/Claude-Desktop use, where
 // there is no OAuth server and MCP_PUBLIC_URL has no meaning. Only the
-// HTTP OAuth endpoints (api/oauth/*, api/.well-known/*) and the OAuth
+// HTTP OAuth endpoints (api/oauth/*, api/oauth-metadata/*, exposed at
+// /.well-known/* via vercel.json rewrites) and the OAuth
 // token-validation path actually need this value, so only they should
 // throw when it's missing.
 function getIssuerUrl(): string {
