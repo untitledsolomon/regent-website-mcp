@@ -52,6 +52,8 @@ npm run build
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Service role key (Supabase dashboard → Settings → API) |
 | `REGENT_ADMIN_EMAIL` | Only for `send_newsletter`/`reply_to_consultation` | Email of a Supabase Auth user with the `admin` role |
 | `REGENT_ADMIN_PASSWORD` | Only for `send_newsletter`/`reply_to_consultation` | Password for that user |
+| `MCP_PUBLIC_URL` | Yes, for OAuth | This deployment's public base URL, e.g. `https://mcp.regentplatform.com` (no trailing slash). Used to build the OAuth metadata/endpoint URLs advertised to clients. |
+| `SUPABASE_ANON_KEY` | Yes, for OAuth | Supabase anon/publishable key (Settings -> API). Used only to run `signInWithPassword` on the `/oauth/authorize` login screen - never given service-role access. |
 
 The two email tools call the site's existing `send-newsletter` and
 `reply-consultation` Edge Functions, which require a logged-in admin user's
@@ -130,6 +132,46 @@ model and audit logging. Files added/changed in this update:
 
 See the "Deployment" and "Creating first agent" sections below for how to
 deploy and bootstrap the system.
+
+## OAuth (required for Claude.ai custom connectors)
+
+Claude.ai's custom connector UI only supports OAuth-based authentication for
+remote MCP servers - there is no field to paste a static bearer token or API
+key (a `static_headers` option exists but is beta and org-admin-gated; if it
+becomes available for your account it's the simpler path). This server
+therefore implements a minimal OAuth 2.1 authorization server with Dynamic
+Client Registration (RFC 7591) alongside the original static-key auth, so
+both work:
+
+- **Static key** (`regent_mcp_sk_...`, from `create-agent`): still works
+  for direct API/script use, e.g. `curl` or a custom integration.
+- **OAuth** (`regent_at_...` access tokens): used automatically when you add
+  this server as a custom connector in Claude.ai. Claude discovers the
+  OAuth endpoints via `/.well-known/oauth-protected-resource` and
+  `/.well-known/oauth-authorization-server`, registers itself as a client
+  via `/api/oauth/register`, and sends the user (you) to
+  `/api/oauth/authorize` to sign in with your Supabase Auth admin
+  credentials before issuing a token.
+
+Both auth methods resolve to the same `mcp_agents` row and the same scope
+enforcement in `wrap-register.ts` - OAuth is just a different way to get a
+valid `agent_id`, not a separate permission model.
+
+**Setup steps specific to OAuth:**
+
+1. Run the new migration: `supabase/migrations/20260903_000001_create_oauth_tables.sql`.
+2. Make sure a Supabase Auth user exists with the `admin` role in
+   `user_roles` (the same one used for `REGENT_ADMIN_EMAIL` is fine) - this
+   is the account you'll sign in with on the `/oauth/authorize` screen.
+3. Set `MCP_PUBLIC_URL` and `SUPABASE_ANON_KEY` in Vercel (see table above).
+4. In Claude.ai: Settings -> Connectors -> Add custom connector -> paste
+   `https://<your-domain>/api/mcp` as the server URL. Leave OAuth Client
+   ID/Secret blank - DCR handles that automatically. Click Connect, sign in
+   with your admin email/password, and approve.
+
+The first time you sign in this way, a new `mcp_agents` row named
+`oauth:<your-email>` is created automatically with full (`*`) scope, since
+the login is already gated on the Supabase `admin` role.
 
 ## Deployment (Vercel)
 

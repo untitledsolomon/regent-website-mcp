@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { findAgentByApiKey, markAgentLastUsed } from "./auth.js";
+import { resolveAgentFromCredential, markAgentLastUsed } from "./auth.js";
 import { sanitizeInputSummary, logCallFireAndForget } from "./logging.js";
 
 // Map each tool name to a required scope. Keep conservative mapping matching
@@ -76,7 +76,7 @@ export function applyAuthAndLoggingWrapper(server: McpServer) {
       // Local dev: if no Authorization provided and env explicitly allows local no-auth, bypass auth.
       let agent = null;
       if (rawKey) {
-        agent = await findAgentByApiKey(rawKey);
+        agent = await resolveAgentFromCredential(rawKey);
         if (!agent) {
           const err = new Error("Invalid API key");
           // Log attempt with null agent_id

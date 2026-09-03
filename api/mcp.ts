@@ -12,6 +12,33 @@ import { registerLeadsTools } from "../src/tools/leads.js";
 import { registerAnalyticsTools } from "../src/tools/analytics.js";
 import { registerEdgeFunctionTools } from "../src/tools/edgeFunctions.js";
 import { applyAuthAndLoggingWrapper } from "../src/wrap-register.js";
+import { resolveAgentFromCredential } from "../src/auth.js";
+import { mcpResourceUrl } from "../src/oauth.js";
+
+function extractBearer(authHeader: string | undefined): string | null {
+  if (!authHeader) return null;
+  const m = authHeader.match(/^Bearer\s+(.*)$/i);
+  return m ? m[1] : authHeader;
+}
+
+// RFC 9728 / MCP auth spec: an unauthenticated or invalid request to a
+// protected MCP resource gets a 401 with a WWW-Authenticate header pointing
+// at our protected resource metadata, so Claude knows to run the OAuth
+// discovery + DCR + authorize + token flow instead of just surfacing a
+// generic tool error. `initialize` itself is allowed through without auth,
+// matching common MCP client behavior of probing capabilities before the
+// user has connected anything.
+function protectedResourceChallenge(res: VercelResponse) {
+  res.setHeader(
+    "WWW-Authenticate",
+    `Bearer resource_metadata="${mcpResourceUrl().replace(/\/api\/mcp$/, "")}/.well-known/oauth-protected-resource"`
+  );
+  res.status(401).json({
+    jsonrpc: "2.0",
+    error: { code: -32001, message: "Unauthorized: valid Bearer token required" },
+    id: null,
+  });
+}
 
 // IMPORTANT: create a brand-new McpServer AND a brand-new transport on every
 // request. The MCP SDK's Server.connect() throws "Already connected to a
@@ -24,6 +51,23 @@ import { applyAuthAndLoggingWrapper } from "../src/wrap-register.js";
 // server — tool registration is cheap — so just build it fresh each time.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
+    // Let `initialize` (and notifications/pings with no method at all)
+    // through without a token, same as before - some MCP clients probe
+    // capabilities pre-auth. Everything else (tools/list, tools/call, ...)
+    // requires a valid credential, checked here at the HTTP layer so a
+    // missing/invalid token produces a real 401 + WWW-Authenticate
+    // challenge instead of a JSON-RPC error buried inside a 200 response,
+    // which is what actually triggers Claude's OAuth discovery flow.
+    const rpcMethod = (req as any).body?.method;
+    if (rpcMethod && rpcMethod !== "initialize") {
+      const rawKey = extractBearer(req.headers.authorization);
+      const agent = rawKey ? await resolveAgentFromCredential(rawKey) : null;
+      if (!agent || agent.revoked) {
+        protectedResourceChallenge(res);
+        return;
+      }
+    }
+
     const server = new McpServer({ name: "regent-website", version: "1.0.0" });
     applyAuthAndLoggingWrapper(server);
     registerContentTools(server);
