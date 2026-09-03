@@ -13,9 +13,12 @@ import { registerAnalyticsTools } from "../src/tools/analytics.js";
 import { registerEdgeFunctionTools } from "../src/tools/edgeFunctions.js";
 import { applyAuthAndLoggingWrapper } from "../src/wrap-register.js";
 
-// Ensure a single server instance per lambda container reuse
+// Reuse the McpServer instance across warm lambda invocations (safe — it just
+// holds tool registrations), but NEVER reuse the transport: a Streamable HTTP
+// transport tracks per-connection/session state and Vercel serverless
+// functions are not guaranteed to route repeat requests to the same
+// container, so a shared transport causes intermittent 500s under load.
 let server: McpServer | null = null;
-let transport: any = null;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -29,10 +32,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       registerEdgeFunctionTools(server);
     }
 
-    if (!transport) {
-      transport = new StreamableHTTPServerTransport();
-      await server.connect(transport);
-    }
+    // Stateless mode: no session ID is generated or required, which is the
+    // correct fit for a serverless function (no durable in-memory session
+    // store across invocations/containers). Explicitly setting
+    // sessionIdGenerator: undefined selects this mode rather than leaving it
+    // ambiguous, which was the source of the intermittent 500/406 responses.
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
+    await server.connect(transport);
 
     // Pass the Authorization header into the transport's expected auth slot
     // so the wrapper can read it from context. The transport copies req.auth
