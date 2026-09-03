@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from "@vercel/node";
-import { issuerUrl, mcpResourceUrl } from "../src/oauth.js";
+import { issuerUrl, mcpResourceUrl } from "../../src/oauth.js";
 
 // RFC 9728 Protected Resource Metadata. Claude fetches this after receiving
 // a 401 with a WWW-Authenticate: Bearer resource_metadata="..." header from

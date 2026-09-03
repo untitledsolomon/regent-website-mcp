@@ -4,7 +4,7 @@ import {
   authorizationEndpoint,
   tokenEndpoint,
   registrationEndpoint,
-} from "../src/oauth.js";
+} from "../../src/oauth.js";
 
 // RFC 8414 Authorization Server Metadata. Tells Claude where to send
 // registration, authorize, and token requests, and that this server
