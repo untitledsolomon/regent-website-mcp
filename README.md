@@ -10,6 +10,7 @@ transactional email (newsletter sends, consultation replies).
 | Domain | Tools |
 |---|---|
 | **Content** (blog posts, case studies, resources) | `list_content`, `get_content`, `create_content`, `update_content`, `set_content_published`, `delete_content` |
+| **Storage** (resource files, blog/case-study images) | `list_storage_buckets`, `list_bucket_contents`, `upload_resource_file`, `download_storage_file` |
 | **Careers** | `list_job_postings`, `create_job_posting`, `update_job_posting`, `delete_job_posting`, `list_job_applications`, `update_job_application_status` |
 | **Leads** | `list_consultation_requests`, `get_consultation_request`, `update_consultation_request`, `add_inquiry_note`, `list_newsletter_subscribers`, `list_newsletter_sends` |
 | **Analytics** | `get_content_analytics`, `get_content_insights`, `get_daily_views`, `get_unique_visitors_count`, `get_audience_breakdown`, `get_conversion_stats`, `get_analytics_detail`, `get_admin_activity_log` |
@@ -19,7 +20,42 @@ This covers every table in the site's live schema (`blog_posts`, `case_studies`,
 `resources`, `careers`, `job_applications`, `consultation_requests`,
 `inquiry_notes`, `newsletter_subscribers`, `newsletter_sends`,
 `admin_activity_log`) plus the analytics RPC functions already defined in the
-database, and the two Resend-backed edge functions for actually sending email.
+database, the two storage buckets used by content (`resource-files`,
+`content-images`), and the two Resend-backed edge functions for actually
+sending email.
+
+### Storage tools
+
+Resources need a real, publicly reachable `file_url` before `create_content`
+can point at it — the content tools above only ever write DB rows, so
+`upload_resource_file` is what actually puts bytes into Supabase Storage.
+
+| Tool | What it does |
+|---|---|
+| `list_storage_buckets` | Lists the buckets an agent can upload into, their Supabase-level config (public/private, size limit, allowed MIME types), and what this server additionally enforces on top. |
+| `list_bucket_contents` | Lists files (and folders) in a bucket, optionally under a path prefix — name, size, content type, last modified. |
+| `upload_resource_file` | Uploads a base64-encoded file to a bucket and returns its public URL, ready to drop into `resources.file_url`, `blog_posts.image_url`/`og_image`, or `case_studies.image_url`/`og_image`. |
+| `download_storage_file` | Downloads a file by path. Files ≤2MB are returned inline as base64; larger files return the public URL instead of inlining the bytes, since both buckets are public. |
+
+**Buckets:**
+
+| Bucket | For | Allowed types (enforced by this server) | Size limit |
+|---|---|---|---|
+| `resource-files` | Downloadable resource documents (whitepapers, guides, checklists) | PDF, DOC, DOCX | 10MB |
+| `content-images` | Blog/case-study images (covers, inline post images, `og_image`) | PNG, JPEG, WEBP, GIF, SVG | 10MB |
+
+Note: the `resource-files` Supabase bucket itself doesn't enforce a MIME
+restriction — the legacy admin editors (`ResourceEditor`, `PostEditor`,
+`CaseStudyEditor`, `RichTextEditor` in the website repo) still upload images
+into that same bucket today. `upload_resource_file` holds *agents* to
+document types only for that bucket regardless, since that's what resources
+are for; the bucket-level restriction can be tightened once those editors are
+updated to use `content-images` for their image uploads.
+
+The 10MB cap is enforced by this server before any bytes are sent to
+Supabase (checked after base64 decoding, so it reflects real file size, not
+payload size) — independent of whatever limit is set on the bucket itself.
+
 
 ## ⚠️ Before you run this
 
@@ -31,6 +67,9 @@ this runs in with the same care as production database credentials:
 - Never commit `.env` or hardcode keys in source (see `.gitignore`).
 - Only give this server to agents/people you'd trust with direct DB access.
 - The `delete_content` and `delete_job_posting` tools are irreversible.
+- `delete_content` only deletes the DB row — it does **not** remove the
+  underlying file from storage if the row was a resource. Uploaded files are
+  left orphaned in the bucket; there's no `delete_storage_file` tool yet.
 - `send_newsletter` and `reply_to_consultation` send **real emails** — there's
   no dry-run mode built in yet. Consider adding a confirmation step in your
   agent's workflow before invoking them.
@@ -104,7 +143,7 @@ src/
   index.ts           - entrypoint, registers all tool modules, starts stdio transport
   supabase.ts         - single Supabase client instance (service role)
   tools/
-    content.ts        - blog_posts / case_studies / resources CRUD + publish toggle
+    content.ts        - blog_posts / case_studies / resources CRUD + publish toggle + storage tools
     careers.ts         - job postings + applications
     leads.ts            - consultation_requests, inquiry_notes, newsletter_subscribers/sends
     analytics.ts         - wraps the DB's analytics RPC functions
@@ -221,6 +260,11 @@ admin usage and generate additional narrower-scoped keys for production agents.
    `mcp_call_log` so that only users with the `admin` role can read or write
    them from the web UI. The server-side MCP process uses the service role key
    and bypasses RLS when calling `supabase` via the service role client.
+3. The `resource-files` and `content-images` storage buckets used by the
+   storage tools above are created by migrations in the **website repo**
+   (`regent-website`), not this one — apply those there first, or
+   `upload_resource_file`/`list_bucket_contents` will fail with a
+   bucket-not-found error.
 
 Example minimal policies (adjust to your project's role helpers):
 

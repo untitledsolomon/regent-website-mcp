@@ -12,6 +12,10 @@ const TOOL_SCOPE_MAP: Record<string, string> = {
   update_content: "content:write",
   set_content_published: "content:write",
   delete_content: "content:write",
+  upload_resource_file: "content:write",
+  list_storage_buckets: "content:read",
+  list_bucket_contents: "content:read",
+  download_storage_file: "content:read",
   // leads
   list_consultation_requests: "leads:read",
   get_consultation_request: "leads:read",
