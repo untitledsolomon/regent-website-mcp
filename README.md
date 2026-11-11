@@ -13,7 +13,7 @@ transactional email (newsletter sends, consultation replies).
 | **Storage** (resource files, blog/case-study images) | `list_storage_buckets`, `list_bucket_contents`, `upload_resource_file`, `download_storage_file` |
 | **Careers** | `list_job_postings`, `create_job_posting`, `update_job_posting`, `delete_job_posting`, `list_job_applications`, `update_job_application_status` |
 | **Leads** | `list_consultation_requests`, `get_consultation_request`, `update_consultation_request`, `add_inquiry_note`, `list_newsletter_subscribers`, `list_newsletter_sends` |
-| **Analytics** | `get_content_analytics`, `get_content_insights`, `get_daily_views`, `get_unique_visitors_count`, `get_audience_breakdown`, `get_conversion_stats`, `get_analytics_detail`, `get_admin_activity_log` |
+| **Analytics** | `analytics_overview`, `analytics_daily`, `analytics_top_content`, `analytics_content_trend`, `analytics_sources`, `analytics_geo`, `analytics_devices`, `analytics_funnel`, `analytics_unique_visitors` (+ legacy `get_content_analytics`, `get_content_insights`, `get_daily_views`, `get_audience_breakdown`, `get_conversion_stats`, `get_analytics_detail`, `get_admin_activity_log`) |
 | **Email (Edge Functions)** | `send_newsletter`, `reply_to_consultation` |
 
 This covers every table in the site's live schema (`blog_posts`, `case_studies`,
